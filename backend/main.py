@@ -7,6 +7,8 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
 
 from .database import Database
 from .routes import router
@@ -43,6 +45,13 @@ def create_app(database_path=None):
         return JSONResponse(status_code=503, content={"detail": "Storage operation failed. Try again or check local database access."})
 
     app.include_router(router)
+    frontend = Path(__file__).resolve().parent.parent / "frontend"
+    if frontend.is_dir():
+        app.mount("/assets", StaticFiles(directory=frontend), name="assets")
+
+        @app.get("/", include_in_schema=False)
+        def home():
+            return FileResponse(frontend / "index.html")
     return app
 
 

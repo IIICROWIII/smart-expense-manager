@@ -184,3 +184,40 @@ def test_cli_persistence_and_error_exit(tmp_path):
     assert result.returncode == 0 and '"expense_cents": 1250' in result.stdout
     result = subprocess.run(common + ["add", "--amount", "NaN", "--category-id", "1", "--date", "2026-10-13"], capture_output=True, text=True)
     assert result.returncode == 2
+
+
+def test_copy_budgets_preserves_existing_and_handles_january(service):
+    service.set_budget("2025-12", "1000")
+    service.set_budget("2025-12", "200", 1)
+    service.set_budget("2026-01", "500")
+    assert service.copy_budgets("2026-01")["copied"] == 1
+    limits = service.budgets("2026-01")
+    assert limits[0]["limit_cents"] == 50000
+    assert service.copy_budgets("2026-01")["copied"] == 0
+    with pytest.raises(ValidationError):
+        service.copy_budgets("0001-01")
+
+
+def test_suggestion_is_explained_and_word_bounded(service):
+    assert service.suggest_category("Uber to Taksim")["category"] == "Transport"
+    assert "uber" in service.suggest_category("UBER to Taksim")["reason"]
+    assert service.suggest_category("Discovery")["category"] == "Other"
+    assert service.suggest_category("Monthly salary", "income")["category"] == "Salary"
+
+
+def test_history_crosses_year_boundary(service):
+    add(service, "15", date="2025-12-10")
+    result = service.history("2026-02")
+    assert len(result) == 6
+    assert result[0]["month"] == "2025-09"
+    assert next(r for r in result if r["month"] == "2025-12")["expense_cents"] == 1500
+    assert len(service.history("0001-01")) == 1
+
+
+def test_frontend_and_new_endpoints(client):
+    assert client.get("/").status_code == 200
+    assert "olive ledger" in client.get("/").text
+    assert client.get("/assets/app.js").status_code == 200
+    assert client.post("/categories/suggest", json={"description": "Lunch"}).json()["category"] == "Food & Dining"
+    assert client.post("/budgets/copy-previous", json={"month": "2026-10"}).json()["copied"] == 0
+    assert len(client.get("/reports/history?month=2026-10").json()) == 6

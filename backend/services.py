@@ -210,3 +210,53 @@ class ExpenseService:
             for row in conn.execute(repository.TRANSACTION_SELECT + " WHERE substr(t.date,1,7)=? ORDER BY t.date,t.id", (month_value,)):
                 writer.writerow([row["id"], row["kind"], f"{Decimal(row['amount_cents'])/100:.2f}", "TRY", safe(row["category"]), row["date"], safe(row["description"]), row["payment_method"]])
         return output.getvalue().encode("utf-8-sig")
+
+    def suggest_category(self, description, kind="expense"):
+        description = text(description, "Description", 500, True)
+        if kind not in ("expense", "income"):
+            raise ValidationError("Kind must be expense or income.")
+        rules = {"Food & Dining": ("lunch", "dinner", "coffee", "restaurant", "breakfast"),
+                 "Groceries": ("migros", "bim", "market", "groceries"),
+                 "Transport": ("uber", "taxi", "metro", "bus", "istanbulkart"),
+                 "Rent & Bills": ("rent", "electricity", "water bill", "internet"),
+                 "Shopping": ("clothes", "shoes", "shopping"),
+                 "Education": ("book", "course", "tuition"), "Health": ("pharmacy", "doctor", "medicine"),
+                 "Entertainment": ("cinema", "movie", "concert"), "Subscriptions": ("netflix", "spotify", "subscription")}
+        if kind == "income":
+            rules = {"Allowance": ("allowance",), "Salary": ("salary",), "Freelance": ("freelance",)}
+        import re
+        for category, words in rules.items():
+            for word in words:
+                if re.search(r"\b" + re.escape(word) + r"\b", description.casefold()):
+                    item = next(c for c in self.categories() if c["name"] == category)
+                    return {"category_id": item["id"], "category": category, "reason": f"Matched the word '{word}'."}
+        name = "Other" if kind == "expense" else "Other Income"
+        item = next(c for c in self.categories() if c["name"] == name)
+        return {"category_id": item["id"], "category": name, "reason": "No keyword matched. Choose a category to override."}
+
+    def copy_budgets(self, month_value):
+        month(month_value)
+        year, number = map(int, month_value.split("-"))
+        if year == 1 and number == 1:
+            raise ValidationError("There is no previous supported month.")
+        previous = f"{year-1:04d}-12" if number == 1 else f"{year:04d}-{number-1:02d}"
+        with self.db.connect() as conn:
+            copied = 0
+            for row in conn.execute("SELECT * FROM budgets WHERE month=?", (previous,)).fetchall():
+                cursor = conn.execute("INSERT OR IGNORE INTO budgets(month,category_id,limit_cents) VALUES (?,?,?)", (month_value, row["category_id"], row["limit_cents"]))
+                copied += cursor.rowcount
+            self._budget_alerts(conn, month_value)
+            return {"copied": copied, "source_month": previous, "budgets": self._budgets(conn, month_value)}
+
+    def history(self, month_value):
+        month(month_value)
+        year, number = map(int, month_value.split("-"))
+        index = (year - 1) * 12 + number - 1
+        result = []
+        with self.db.connect() as conn:
+            for value in range(max(0, index-5), index+1):
+                y, m = divmod(value, 12)
+                label = f"{y+1:04d}-{m+1:02d}"
+                totals = {r["kind"]: r["total"] for r in conn.execute("SELECT kind,SUM(amount_cents) AS total FROM transactions WHERE substr(date,1,7)=? GROUP BY kind", (label,))}
+                result.append({"month": label, "income_cents": totals.get("income",0), "expense_cents": totals.get("expense",0)})
+        return result

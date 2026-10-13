@@ -1,6 +1,6 @@
 """HTTP transport adapter; business rules remain in ExpenseService."""
 from fastapi import APIRouter, Query, Request, Response
-from .schemas import BudgetInput, Kind, TransactionInput, TransactionPatch
+from .schemas import BudgetInput, CopyBudgetInput, SuggestionInput, Kind, TransactionInput, TransactionPatch
 
 router = APIRouter()
 
@@ -10,8 +10,8 @@ def service(request):
 
 
 @router.get("/health")
-def health():
-    return {"status": "ok", "currency": "TRY"}
+def health(request: Request):
+    return {"status": "ok", "currency": "TRY", "demo": getattr(request.app.state, "demo", False)}
 
 
 @router.get("/categories")
@@ -80,3 +80,18 @@ def alerts(request: Request, month: str | None = None):
 @router.patch("/alerts/{identifier}")
 def read_alert(identifier: int, request: Request):
     return service(request).read_alert(identifier)
+
+
+@router.post("/categories/suggest")
+def suggest(data: SuggestionInput, request: Request):
+    return service(request).suggest_category(data.description, data.kind)
+
+
+@router.post("/budgets/copy-previous")
+def copy_budgets(data: CopyBudgetInput, request: Request):
+    return service(request).copy_budgets(data.month)
+
+
+@router.get("/reports/history")
+def history(month: str, request: Request):
+    return service(request).history(month)

@@ -32,3 +32,12 @@ class BudgetInput(InputModel):
     month: str = Field(max_length=7)
     amount: str = Field(max_length=32)
     category_id: int | None = Field(default=None, gt=0)
+
+
+class CopyBudgetInput(InputModel):
+    month: str = Field(max_length=7)
+
+
+class SuggestionInput(InputModel):
+    description: str = Field(max_length=500)
+    kind: Kind = "expense"

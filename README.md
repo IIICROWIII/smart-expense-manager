@@ -1,6 +1,6 @@
 # Smart Expense Manager
 
-Python backend for a student's monthly spending and allowance in Istanbul. It records expenses and income, manages monthly and category budgets, generates reports, and explains unusually large expenses. The REST API and argument-based CLI share the same business rules and SQLite database.
+Complete local web application for a student's monthly spending and allowance in Istanbul. It records expenses and income, manages monthly and category budgets, generates reports, and explains unusually large expenses. Its white and olive frontend, REST API and argument-based CLI share one SQLite-backed service.
 
 This version is a local, single-user application using TRY. It has no login or tenant isolation. Run the API on localhost. A public multi-user service would require authentication, per-user records and authorization before deployment.
 
@@ -14,7 +14,21 @@ python -m venv .venv
 .\.venv\Scripts\python.exe -m uvicorn backend.main:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-The project already has a local `.venv` with the required packages installed. Open `http://127.0.0.1:8000/docs` for interactive API documentation. `http://127.0.0.1:8000/openapi.json` provides the frontend contract. Database tables and categories are created on startup, not on import.
+The project already has a local `.venv` with the required packages installed. Open `http://127.0.0.1:8000/` for the application, `http://127.0.0.1:8000/docs` for interactive API documentation, and `http://127.0.0.1:8000/openapi.json` for the frontend contract. Database tables and categories are created on startup, not on import.
+
+Alternatively, start the entire app with one command:
+
+```powershell
+.\.venv\Scripts\python.exe launch.py
+```
+
+For a presentation demo with isolated, explicitly fictional October 2026 data:
+
+```powershell
+.\.venv\Scripts\python.exe launch.py --demo --port 8001
+```
+
+Open `http://127.0.0.1:8001/`. Demo mode uses `data/demo.db` and never changes normal records. It keeps demo edits between runs. The interface uses built-in local fonts and SVG/CSS charts, so it works without CDN access after setup.
 
 The default database is `data/expenses.db`, resolved relative to the project rather than the current shell directory. Override it with `EXPENSE_DB_PATH`; the CLI also supports `--db PATH`. This schema does not import or migrate the earlier Streamlit sample database.
 
@@ -36,6 +50,14 @@ CLI --------------------> ExpenseService
 | `backend/database.py` | Connection lifecycle, transactions, schema, indexes and seeded categories |
 | `backend/__init__.py` | Python package marker |
 | `cli.py` | Argument-based commands using the service directly |
+| `launch.py` | Complete-app launcher and isolated fictional demo data |
+| `frontend/index.html` | Accessible page shell, navigation, forms and dialogs |
+| `frontend/style.css` | Responsive white and olive styling |
+| `frontend/app.js` | Real API integration, forms, charts, filters and rule-based helper |
+| `docs/architecture.md` | Application diagram, database relationships and design decisions |
+| `presentation/Olive-Ledger.pptx` | Five-slide editable presentation with speaker notes |
+| `presentation/presentation-script.md` | English talk, timing cues, Arabic rehearsal guidance and technical Q&A |
+| `presentation/team.md` | User-provided roster; not a contribution claim |
 | `tests/test_backend.py` | Business rules, API, persistence, concurrency and invalid input tests |
 | `requirements.txt` | Tested API/server dependency versions |
 | `requirements-dev.txt` | Runtime requirements plus testing dependencies |
@@ -65,6 +87,7 @@ Transaction types are `expense` and `income`. Fetch IDs from `/categories` rathe
 | --- | --- | --- |
 | GET | `/health` | Health status and currency |
 | GET | `/categories` | Category IDs, names and transaction type |
+| POST | `/categories/suggest` | Suggest a category from `{description, kind?}` with an explicit keyword reason |
 | POST | `/transactions` | Create transaction; returns `{transaction, alerts}`; status 201 |
 | GET | `/transactions` | Filters: `month`, `kind`, `category_id`, `search`, `unusual`; pagination: `limit`, `offset` |
 | GET | `/transactions/{id}` | One transaction |
@@ -73,8 +96,10 @@ Transaction types are `expense` and `income`. Fetch IDs from `/categories` rathe
 | PUT | `/budgets` | Upsert `{month, amount, category_id?}`; omitted/null category means overall monthly budget |
 | GET | `/budgets?month=YYYY-MM` | Limits, spending, remaining money, percentage and status |
 | DELETE | `/budgets/{id}` | Remove limit and related budget alert history; status 204 |
+| POST | `/budgets/copy-previous` | `{month}` copies last month's limits without replacing existing ones |
 | GET | `/reports/summary?month=YYYY-MM` | Income, expenses, balance, daily/category/payment totals, five largest expenses, forecast and budgets |
 | GET | `/reports/export?month=YYYY-MM` | Download every transaction in selected month as CSV |
+| GET | `/reports/history?month=YYYY-MM` | Income and expense totals for up to six months ending at selected month |
 | GET | `/alerts?month=YYYY-MM` | Saved alerts, newest first; month is optional |
 | PATCH | `/alerts/{id}` | Mark an alert as read; no body required |
 
@@ -130,12 +155,18 @@ Keep generated exports outside the submitted implementation repository.
 
 Tests use disposable databases and never modify the real database. They cover integer monetary accuracy, invalid amounts/dates, category mismatches, rollback, budget thresholds, anomaly baselines, concurrent saves, CSV formula handling, API validation and CLI persistence.
 
+The 30-test suite also covers category suggestions, copying budgets across a year boundary, keeping existing budget values, report history and static frontend delivery. Manual browser checks cover adding/editing transactions, editing budget limits, search empty states, displayed calculations, assistant reasoning and desktop/mobile layouts.
+
 ## Team submission
 
 Each member must author `contributions/<STUDENT_NAME>_<STUDENT_ID>_<GITHUB_USERNAME>.md` describing actual work and linking relevant commits. Do not invent contributions or commit ownership. Publish a clean public GitHub repository and submit its URL with the PPTX. Names, IDs, contribution records and the presentation are still required from the team.
 
 ## Deferred features
 
-This backend does not implement the frontend, conversational assistant, automatic categorization, duplicate detection, copying last month's budgets, or a dedicated six-month comparison endpoint. The frontend can request individual monthly summaries for a six-month view. These additions can follow the tested core.
+Implemented: responsive frontend, explained keyword category suggestions with manual override, a rule-based question helper, copying previous budgets and a six-month history endpoint. Deferred: automatic bank imports, duplicate detection, arbitrary natural-language transaction entry, multi-user accounts and AI chat.
+
+## Presentation and final submission
+
+The editable deck and timed English script are under `presentation/`. The spoken script has 195 words and targets roughly 1:50 with slide changes, but timing must be verified by rehearsal. It does not guarantee a grade. All team members should understand the included code excerpts and practise the Q&A. Contribution files must reflect actual individual work and matching GitHub commits before submission.
 
 Implementation follows the official [FastAPI lifespan guide](https://fastapi.tiangolo.com/advanced/events/) and [testing guide](https://fastapi.tiangolo.com/tutorial/testing/).
